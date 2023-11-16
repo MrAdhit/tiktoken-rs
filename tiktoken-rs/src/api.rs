@@ -374,11 +374,40 @@ pub mod async_openai {
         for super::ChatCompletionRequestMessage
     {
         fn from(m: &async_openai::types::ChatCompletionRequestMessage) -> Self {
-            Self {
-                role: m.role.to_string(),
-                name: m.name.clone(),
-                content: m.content.clone(),
-                function_call: m.function_call.as_ref().map(|f| f.into()),
+            match m {
+                async_openai::types::ChatCompletionRequestMessage::System(m) => Self {
+                    role: m.role.to_string(),
+                    content: m.content.clone(),
+                    name: None,
+                    function_call: None,
+                },
+                async_openai::types::ChatCompletionRequestMessage::User(m) => Self {
+                    role: m.role.to_string(),
+                    content: m.content.as_ref().and_then(|v| match v {
+                        async_openai::types::ChatCompletionRequestUserMessageContent::Text(content) => Some(content),
+                        _ => None,
+                    }).cloned(),
+                    name: None,
+                    function_call: None,
+                },
+                async_openai::types::ChatCompletionRequestMessage::Assistant(m) => Self {
+                    role: m.role.to_string(),
+                    content: m.content.clone(),
+                    name: None,
+                    function_call: None,
+                },
+                async_openai::types::ChatCompletionRequestMessage::Tool(m) => Self {
+                    role: m.role.to_string(),
+                    content: m.content.clone(),
+                    name: Some(m.tool_call_id.clone()),
+                    function_call: None,
+                },
+                async_openai::types::ChatCompletionRequestMessage::Function(m) => Self {
+                    role: m.role.to_string(),
+                    content: m.content.clone(),
+                    name: Some(m.name.clone()),
+                    function_call: None,
+                },
             }
         }
     }
@@ -426,12 +455,10 @@ pub mod async_openai {
         #[test]
         fn test_num_tokens_from_messages() {
             let model = "gpt-3.5-turbo-0301";
-            let messages = &[async_openai::types::ChatCompletionRequestMessage {
-                role: async_openai::types::Role::System,
-                name: None,
+            let messages = &[async_openai::types::ChatCompletionRequestMessage::System(async_openai::types::ChatCompletionRequestSystemMessage {
                 content: Some("You are a helpful, pattern-following assistant that translates corporate jargon into plain English.".to_string()),
-                function_call: None,
-            }];
+                ..Default::default()
+            })];
             let num_tokens = num_tokens_from_messages(model, messages).unwrap();
             assert!(num_tokens > 0);
         }
@@ -439,12 +466,10 @@ pub mod async_openai {
         #[test]
         fn test_get_chat_completion_max_tokens() {
             let model = "gpt-3.5-turbo";
-            let messages = &[async_openai::types::ChatCompletionRequestMessage {
+            let messages = &[async_openai::types::ChatCompletionRequestMessage::System(async_openai::types::ChatCompletionRequestSystemMessage {
                 content: Some("You are a helpful assistant that only speaks French.".to_string()),
-                role: async_openai::types::Role::System,
-                name: None,
-                function_call: None,
-            }];
+                ..Default::default()
+            })];
             let max_tokens = get_chat_completion_max_tokens(model, messages).unwrap();
             assert!(max_tokens > 0);
         }
